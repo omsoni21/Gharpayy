@@ -1,0 +1,215 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// User/Agent model
+model Agent {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  leads          Lead[]          @relation("AssignedLeads")
+  activities     Activity[]
+  visitsScheduled Visit[]
+  
+  @@map("agents")
+}
+
+// Lead model - core of the system
+model Lead {
+  id              String   @id @default(cuid())
+  name            String
+  phone           String
+  email           String?
+  source          String   // WhatsApp, Website, Social Media, Phone Call, Lead Form
+  status          LeadStatus @default(NEW_LEAD)
+  priority        Priority @default(MEDIUM)
+  
+  // Assignment
+  assignedToId    String?
+  assignedTo      Agent?   @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  
+  // Requirements
+  budget          String?
+  location        String?
+  accommodationType String?
+  requirements    String?
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastContactedAt DateTime?
+  nextFollowUpAt  DateTime?
+  
+  // Relations
+  activities      Activity[]
+  visits          Visit[]
+  notes           Note[]
+  
+  @@index([assignedToId])
+  @@index([status])
+  @@index([phone])
+  @@map("leads")
+}
+
+enum LeadStatus {
+  NEW_LEAD
+  CONTACTED
+  REQUIREMENT_COLLECTED
+  PROPERTY_SUGGESTED
+  VISIT_SCHEDULED
+  VISIT_COMPLETED
+  BOOKED
+  LOST
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// Activity/Timeline tracking
+model Activity {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  agentId     String
+  agent       Agent    @relation(fields: [agentId], references: [id])
+  
+  type        ActivityType
+  description String
+  metadata    String?  // JSON string for SQLite compatibility
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([leadId])
+  @@index([agentId])
+  @@map("activities")
+}
+
+enum ActivityType {
+  CALL_INBOUND
+  CALL_OUTBOUND
+  WHATSAPP_MESSAGE
+  EMAIL
+  SMS
+  NOTE_ADDED
+  STATUS_CHANGED
+  VISIT_SCHEDULED
+  VISIT_COMPLETED
+  VISIT_CANCELLED
+  FOLLOW_UP_REMINDER
+}
+
+// Visit scheduling
+model Visit {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id])
+  
+  scheduledBy String
+  scheduledByAgent Agent @relation(fields: [scheduledBy], references: [id])
+  
+  visitDate   DateTime
+  visitTime   String   // Time slot like "10:00 AM"
+  status      VisitStatus @default(SCHEDULED)
+  outcome     String?
+  feedback    String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([leadId])
+  @@index([propertyId])
+  @@map("visits")
+}
+
+enum VisitStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+// Property catalog
+model Property {
+  id          String   @id @default(cuid())
+  name        String
+  address     String
+  city        String   @default("Bangalore")
+  state       String   @default("Karnataka")
+  pincode     String
+  location    String   // Area/locality name
+  
+  // Property details
+  type        PropertyType
+  furnishing  Furnishing?
+  amenities   String?  // Comma-separated list for SQLite compatibility
+  
+  // Pricing
+  minPrice    Int?
+  maxPrice    Int?
+  
+  // Availability
+  vacancyStatus VacancyStatus @default(VACANT)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  visits      Visit[]
+  
+  @@index([location])
+  @@map("properties")
+}
+
+enum PropertyType {
+  SINGLE_ROOM
+  SHARED_ROOM
+  PAYING_GUEST
+  FLAT
+}
+
+enum Furnishing {
+  FULLY_FURNISHED
+  SEMI_FURNISHED
+  UNFURNISHED
+}
+
+enum VacancyStatus {
+  VACANT
+  LIMITED
+  FULL
+}
+
+// Notes on leads
+model Note {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  content   String
+  createdBy String?  // Can be system-generated or agent-created
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([leadId])
+  @@map("notes")
+}
